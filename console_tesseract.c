@@ -1,214 +1,221 @@
 ﻿#include <stdio.h>
 #include <windows.h>
-#include <cmath>
+#include <math.h>
 
-#define C_VERT static_cast<char>(219)
-#define C_EDGE '#'
-#define C_CLEAR ' '
 
-#define F_NUM_VERT 16
-#define F_NUM_EDGE 32
-#define F_SIZE 60.0f
+// определяем размеры консоли
+#define CON_WIDTH 96
+#define CON_HEIGHT 64
 
-#define S_WIDTH 100
-#define S_HEIGHT 100
-#define S_CAMERA_Z 150.0f
-#define S_CAMERA_W 50.0f
+// определяем свойства фигуры
+#define F_VERTEX_COUNT 16U
+#define F_EDGE_COUNT 32U
+#define F_EDGE_LENGTH 22.0f
 
-typedef struct
+// определяем расстояния до камеры
+#define CAMERA_Z 80.0f
+#define CAMERA_W 25.0f
+
+
+// структуры координат на плоскости, в пространстве и в гиперпространстве
+typedef struct _FLOAT_DUAL
 {
 	float x, y;
-}VECT2;
-typedef struct
+}FLOAT_DUAL;
+
+typedef struct _FLOAT_TRIPLE
 {
 	float x, y, z;
-}VECT3;
-typedef struct
+}FLOAT_TRIPLE;
+
+typedef struct _FLOAT_QUAD
 {
 	float x, y, z, w;
-}VECT4;
+}FLOAT_QUAD;
 
-class FIGURE
+// структура, хранящая индексы начала и конца линии
+typedef struct _LINE_PATH_INDEX
 {
-public:
-	VECT2 vertexes2[F_NUM_VERT] = {};
-	VECT4 vertexes4[F_NUM_VERT] = {
-		{ 0, 0, 0, 0 }, { 1, 0, 0, 0 }, { 1, 1, 0, 0 }, { 0, 1, 0, 0 }, { 0, 0, 1, 0 }, { 1, 0, 1, 0 }, { 1, 1, 1, 0 }, { 0, 1, 1, 0 },
-		{ 0, 0, 0, 1 }, { 1, 0, 0, 1 }, { 1, 1, 0, 1 }, { 0, 1, 0, 1 }, { 0, 0, 1, 1 }, { 1, 0, 1, 1 }, { 1, 1, 1, 1 }, { 0, 1, 1, 1 }
-	};
-	unsigned char edges[F_NUM_EDGE][2] = {
-		{ 0, 1 },  { 1, 2 },  { 2, 3 },   { 3, 0 },  { 4, 5 },   { 5, 6 },   { 6, 7 },   { 7, 4 },   { 0, 4 },  { 1, 5 },  { 2, 6 },   { 3, 7 },
-		{ 8, 9 },  { 9, 10 }, { 10, 11 }, { 11, 8 }, { 12, 13 }, { 13, 14 }, { 14, 15 }, { 15, 12 }, { 8, 12 }, { 9, 13 }, { 10, 14 }, { 11, 15 },
-		{ 0, 8 },  { 1, 9 },  { 2, 10 },  { 3, 11 }, { 4, 12 },  { 5, 13 },  { 6, 14 },  { 7, 15 }
-	};
+	int begin, end;
+}LINE_PATH_INDEX;
 
-	FIGURE()
-	{
-		for (int i = 0; i < F_NUM_VERT; i++)
-		{
-			vertexes4[i].x = F_SIZE * vertexes4[i].x + (S_WIDTH - F_SIZE) / 2.0f;
-			vertexes4[i].y = F_SIZE * vertexes4[i].y + (S_HEIGHT - F_SIZE) / 2.0f;
-			vertexes4[i].z = F_SIZE * vertexes4[i].z;
-			vertexes4[i].w = F_SIZE * vertexes4[i].w;
-		}
-	}
-	void rotate(float angle)
-	{
-		VECT4 vect4;
 
-		for (int i = 0; i < F_NUM_VERT; i++)
-		{
-			vertexes4[i].x -= S_WIDTH / 2.0f;
-			vertexes4[i].y -= S_HEIGHT / 2.0f;
-			vertexes4[i].z -= F_SIZE / 2.0f;
-			vertexes4[i].w -= F_SIZE / 2.0f;
-
-			vect4 = vertexes4[i];
-			
-			vertexes4[i].x = cos(angle) * vect4.x - sin(angle) * vect4.z;
-			vertexes4[i].z = sin(angle) * vect4.x + cos(angle) * vect4.z;	
-			vertexes4[i].y = cos(angle) * vect4.y - sin(angle) * vect4.w;
-			vertexes4[i].w = sin(angle) * vect4.y + cos(angle) * vect4.w;
-		
-			vertexes4[i].x += S_WIDTH / 2.0f;
-			vertexes4[i].y += S_HEIGHT / 2.0f;
-			vertexes4[i].z += F_SIZE / 2.0f;
-			vertexes4[i].w += F_SIZE / 2.0f;
-		}
-	}
+// объявляем глобальные переменные
+FLOAT_DUAL vertexes2[F_VERTEX_COUNT];
+FLOAT_QUAD vertexes4[F_VERTEX_COUNT] = {
+	{ -1, -1, -1, -1 }, {  1, -1, -1, -1 }, {  1,  1, -1, -1 }, { -1,  1, -1, -1 }, { -1, -1,  1, -1 }, {  1, -1,  1, -1 }, {  1,  1,  1, -1 }, { -1,  1,  1, -1 },
+	{ -1, -1, -1,  1 }, {  1, -1, -1,  1 }, {  1,  1, -1,  1 }, { -1,  1, -1,  1 }, { -1, -1,  1,  1 }, {  1, -1,  1,  1 }, {  1,  1,  1,  1 }, { -1,  1,  1,  1 }
 };
-
-class SCREEN
-{
-private:
-	char char_pixel, buffer[S_WIDTH * S_HEIGHT + 1];
-	HANDLE hout = nullptr;
-
-	void set_pixel(int x, int y)
-	{
-		if (x >= 0 && y >= 0 && x < S_WIDTH && y < S_HEIGHT)
-		{
-			buffer[y * S_WIDTH + x] = char_pixel;
-		}
-	}
-	void set_line(float x1, float y1, float x2, float y2)
-	{
-		float d = (fabs(x2 - x1) > fabs(y2 - y1)) ? fabs(x2 - x1) : fabs(y2 - y1);
-		float sx = (x2 - x1) / d;
-		float sy = (y2 - y1) / d;
-
-		for (int i = 0; i < d; i++, x1 += sx, y1 += sy)
-		{
-			set_pixel(
-				static_cast<int>(round(x1)),
-				static_cast<int>(round(y1))
-			);
-		}
-	}
-	VECT2 vect4_to_vect2(VECT4& vect4)
-	{
-		VECT3 vect3;
-		VECT2 vect2;
-		float k;
-
-		if (vect4.w > 0)
-		{
-			k = S_CAMERA_W / (S_CAMERA_W + vect4.w);
-			vect3.x = 50.0f + (vect4.x - 50.0f) * k;
-			vect3.y = 50.0f + (vect4.y - 50.0f) * k;
-			vect3.z = 50.0f + (vect4.z - 50.0f) * k;
-		}
-		else
-		{
-			k = S_CAMERA_W / (S_CAMERA_W - vect4.w);
-			vect3.x = 50.0f + (vect4.x - 50.0f) / k;
-			vect3.y = 50.0f + (vect4.y - 50.0f) / k;
-			vect3.z = 50.0f + (vect4.z - 50.0f) / k;
-		}
-		if (vect3.z > 0)
-		{
-			k = S_CAMERA_Z / (S_CAMERA_Z + vect3.z);
-			vect2.x = 50.0f + (vect3.x - 50.0f) * k;
-			vect2.y = 50.0f + (vect3.y - 50.0f) * k;
-		}
-		else
-		{
-			k = S_CAMERA_Z / (S_CAMERA_Z - vect3.z);
-			vect2.x = 50.0f + (vect3.x - 50.0f) / k;
-			vect2.y = 50.0f + (vect3.y - 50.0f) / k;
-		}
-
-		return vect2;
-	}
-public:
-	SCREEN()
-	{
-		CONSOLE_FONT_INFOEX cfi = {};
-		cfi.dwFontSize = { 5, 4 };
-		cfi.cbSize = sizeof(CONSOLE_FONT_INFOEX);
-		hout = GetStdHandle(STD_OUTPUT_HANDLE);
-		SetCurrentConsoleFontEx(hout, false, &cfi);
-
-		system("mode con cols=100 lines=100");
-		system("title Tesseract");
-		system("color 0f");
-
-		buffer[S_WIDTH * S_HEIGHT] = '\0';
-		char_pixel = C_CLEAR;
-	}
-	void set_figure(FIGURE& figure)
-	{
-		// Project 4D vector on 2D screen
-		for (int i = 0; i < F_NUM_VERT; i++)
-		{
-			figure.vertexes2[i] = vect4_to_vect2(figure.vertexes4[i]);
-		}
-
-		// Set edges
-		char_pixel = C_EDGE;
-		for (int i = 0; i < F_NUM_EDGE; i++)
-		{
-			set_line(
-				figure.vertexes2[figure.edges[i][0]].x,
-				figure.vertexes2[figure.edges[i][0]].y,
-				figure.vertexes2[figure.edges[i][1]].x,
-				figure.vertexes2[figure.edges[i][1]].y
-			);
-		}
-
-		// Set vertexes
-		char_pixel = C_VERT;
-		for (int i = 0; i < F_NUM_VERT; i++)
-		{
-			set_pixel(
-				static_cast<int>(round(figure.vertexes2[i].x)),
-				static_cast<int>(round(figure.vertexes2[i].y))
-			);
-		}
-	}
-	void clear()
-	{
-		memset(buffer, C_CLEAR, S_WIDTH * S_HEIGHT);
-	}
-	void print()
-	{
-		SetConsoleCursorPosition(hout, { 0, 0 });
-		printf("%s", buffer);
-	}
+LINE_PATH_INDEX indexes[F_EDGE_COUNT] = {
+	{  0,  1 }, {  1,  2 }, {  2,  3 }, {  3,  0 }, {  4,  5 }, {  5,  6 }, {  6,  7 }, {  7,  4 }, {  0,  4 }, {  1,  5 }, {  2,  6 }, {  3,  7 },
+	{  8,  9 }, {  9, 10 }, { 10, 11 }, { 11,  8 }, { 12, 13 }, { 13, 14 }, { 14, 15 }, { 15, 12 }, {  8, 12 }, {  9, 13 }, { 10, 14 }, { 11, 15 },
+	{  0,  8 }, {  1,  9 }, {  2, 10 }, {  3, 11 }, {  4, 12 }, {  5, 13 }, {  6, 14 }, {  7, 15 }
 };
+char buffer[CON_WIDTH * CON_HEIGHT];
+HANDLE hout = NULL;
+COORD coord = { 0, 0 };
 
+
+// прототипы функций
+void consoleInit();
+void figrueInit();
+void figureRotate(float, float);
+FLOAT_DUAL perspectiveProject(FLOAT_QUAD*);
+void bufferDrawPixel(int, int);
+void bufferDrawLine(float, float, float, float);
+void bufferDrawFigure();
+void bufferClear();
+void bufferShow();
+
+
+// точка входа консольного приложения 
 int main()
 {
-	SCREEN scr;
-	FIGURE fig;
+	const float angleXZ = 0.8f / 180.0f * 3.14159f;
+	const float angleYW = 1.0f / 180.0f * 3.14159f;
 
-	while (GetKeyState(VK_ESCAPE) >= 0)
+	consoleInit();
+	figrueInit();
+
+	// основной цикл программы
+	while (TRUE)
 	{
-		fig.rotate(0.015f);
-		scr.clear();
-		scr.set_figure(fig);
-		scr.print();
+		bufferClear(); // очищаем буфер
+		figureRotate(angleXZ, angleYW); // вращаем фигуру
+		bufferDrawFigure(); // рисуем фигуру в буфер
+		bufferShow(); // выводим буфер в консоль
+		
+		Sleep(4);
 	}
 
 	return 0;
+}
+
+
+// реализация функций
+void consoleInit()
+{
+	// устанавливаем шрифт консоли
+	CONSOLE_FONT_INFOEX cfi = {
+		sizeof(CONSOLE_FONT_INFOEX),
+		0,
+		{ 7, 7 },
+		0,
+		FW_BOLD,
+		L"Consolas"
+	};
+
+	hout = GetStdHandle(STD_OUTPUT_HANDLE);
+	SetCurrentConsoleFontEx(hout, FALSE, &cfi);
+
+	// устанавливаем режим консоли
+	char command[128];
+
+	sprintf(command, "mode con cols=%d lines=%d & title Console Tesseract & color 09", CON_WIDTH, CON_HEIGHT);
+	system(command);
+}
+
+void figrueInit()
+{
+	// масштабируем фигуру
+	for (int i = 0; i < F_VERTEX_COUNT; i++)
+	{
+		vertexes4[i].x *= F_EDGE_LENGTH / 2.0f;
+		vertexes4[i].y *= F_EDGE_LENGTH / 2.0f;
+		vertexes4[i].z *= F_EDGE_LENGTH / 2.0f;
+		vertexes4[i].w *= F_EDGE_LENGTH / 2.0f;
+	}
+}
+
+void figureRotate(float angleXZ, float angleYW)
+{
+	FLOAT_QUAD v4;
+
+	for (int i = 0; i < F_VERTEX_COUNT; i++)
+	{
+		v4 = vertexes4[i];
+
+		// вращение в плоскости XZ
+		vertexes4[i].x = cos(angleXZ) * v4.x - sin(angleXZ) * v4.z;
+		vertexes4[i].z = sin(angleXZ) * v4.x + cos(angleXZ) * v4.z;
+
+		// вращение в плоскости YW
+		vertexes4[i].y = cos(angleYW) * v4.y - sin(angleYW) * v4.w;
+		vertexes4[i].w = sin(angleYW) * v4.y + cos(angleYW) * v4.w;
+	}
+}
+
+FLOAT_DUAL perspectiveProject(FLOAT_QUAD* v4)
+{
+	FLOAT_TRIPLE v3;
+	FLOAT_DUAL v2;
+	float k;
+
+	// проецируем на пространство
+	k = CAMERA_W / (CAMERA_W + v4->w);
+	v3.x = v4->x * k;
+	v3.y = v4->y * k;
+	v3.z = v4->z * k;
+
+	// проецируем на плоскость
+	k = CAMERA_Z / (CAMERA_Z + v3.z);
+	v2.x = v3.x * k;
+	v2.y = v3.y * k;
+
+	// смещаем начало координат в центр консоли
+	v2.x += CON_WIDTH / 2.0f;
+	v2.y += CON_HEIGHT / 2.0f;
+
+	return v2;
+}
+
+void bufferDrawPixel(int x, int y)
+{
+	if (x >= 0 && y >= 0 && x < CON_WIDTH && y < CON_HEIGHT)
+	{
+		buffer[y * CON_WIDTH + x] = '@';
+	}
+}
+
+void bufferDrawLine(float x1, float y1, float x2, float y2)
+{
+	float d = fabsf(x2 - x1) > fabsf(y2 - y1) ? fabsf(x2 - x1) : fabsf(y2 - y1);
+	float dx = (x2 - x1) / d;
+	float dy = (y2 - y1) / d;
+
+	for (int i = 0; i < d; i++, x1 += dx, y1 += dy)
+	{
+		bufferDrawPixel((int)x1, (int)y1);
+	}
+}
+
+void bufferDrawFigure()
+{
+	// проецируем вершины гиперпространства на плоскость консоли
+	for (int i = 0; i < F_VERTEX_COUNT; i++)
+	{
+		vertexes2[i] = perspectiveProject(vertexes4 + i);
+	}
+
+	// рисуем ребра гиперкуба
+	for (int i = 0; i < F_EDGE_COUNT; i++)
+	{
+		bufferDrawLine(
+			vertexes2[indexes[i].begin].x,
+			vertexes2[indexes[i].begin].y,
+			vertexes2[indexes[i].end].x,
+			vertexes2[indexes[i].end].y
+		);
+	}
+}
+
+void bufferClear()
+{
+	memset(buffer, ' ', CON_WIDTH * CON_HEIGHT);
+}
+
+void bufferShow()
+{
+	SetConsoleCursorPosition(hout, coord);
+	fwrite(buffer, sizeof(char), CON_WIDTH * CON_HEIGHT, stdout);
 }
