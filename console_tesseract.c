@@ -1,6 +1,7 @@
 ﻿#include <stdio.h>
 #include <windows.h>
 #include <math.h>
+#pragma warning(disable : 4996) // отключаем предупреждения о небезопасных функциях
 
 
 // определяем размеры консоли
@@ -18,10 +19,10 @@
 
 
 // структуры координат на плоскости, в пространстве и в гиперпространстве
-typedef struct _FLOAT_DUAL
+typedef struct _FLOAT_PAIR
 {
 	float x, y;
-}FLOAT_DUAL;
+}FLOAT_PAIR;
 
 typedef struct _FLOAT_TRIPLE
 {
@@ -41,7 +42,7 @@ typedef struct _LINE_PATH_INDEX
 
 
 // объявляем глобальные переменные
-FLOAT_DUAL vertexes2[F_VERTEX_COUNT];
+FLOAT_PAIR vertexes2[F_VERTEX_COUNT];
 FLOAT_QUAD vertexes4[F_VERTEX_COUNT] = {
 	{ -1, -1, -1, -1 }, {  1, -1, -1, -1 }, {  1,  1, -1, -1 }, { -1,  1, -1, -1 }, { -1, -1,  1, -1 }, {  1, -1,  1, -1 }, {  1,  1,  1, -1 }, { -1,  1,  1, -1 },
 	{ -1, -1, -1,  1 }, {  1, -1, -1,  1 }, {  1,  1, -1,  1 }, { -1,  1, -1,  1 }, { -1, -1,  1,  1 }, {  1, -1,  1,  1 }, {  1,  1,  1,  1 }, { -1,  1,  1,  1 }
@@ -60,8 +61,7 @@ COORD coord = { 0, 0 };
 void consoleInit();
 void figrueInit();
 void figureRotate(float, float);
-FLOAT_DUAL perspectiveProject(FLOAT_QUAD*);
-void bufferDrawPixel(int, int);
+FLOAT_PAIR perspectiveProject(FLOAT_QUAD*);
 void bufferDrawLine(float, float, float, float);
 void bufferDrawFigure();
 void bufferClear();
@@ -99,7 +99,7 @@ void consoleInit()
 	CONSOLE_FONT_INFOEX cfi = {
 		sizeof(CONSOLE_FONT_INFOEX),
 		0,
-		{ 7, 7 },
+		{ 8, 8 },
 		0,
 		FW_BOLD,
 		L"Consolas"
@@ -145,10 +145,10 @@ void figureRotate(float angleXZ, float angleYW)
 	}
 }
 
-FLOAT_DUAL perspectiveProject(FLOAT_QUAD* v4)
+FLOAT_PAIR perspectiveProject(FLOAT_QUAD* v4)
 {
 	FLOAT_TRIPLE v3;
-	FLOAT_DUAL v2;
+	FLOAT_PAIR v2;
 	float k;
 
 	// проецируем на пространство
@@ -169,23 +169,19 @@ FLOAT_DUAL perspectiveProject(FLOAT_QUAD* v4)
 	return v2;
 }
 
-void bufferDrawPixel(int x, int y)
-{
-	if (x >= 0 && y >= 0 && x < CON_WIDTH && y < CON_HEIGHT)
-	{
-		buffer[y * CON_WIDTH + x] = '@';
-	}
-}
-
 void bufferDrawLine(float x1, float y1, float x2, float y2)
 {
 	float d = fabsf(x2 - x1) > fabsf(y2 - y1) ? fabsf(x2 - x1) : fabsf(y2 - y1);
 	float dx = (x2 - x1) / d;
 	float dy = (y2 - y1) / d;
+	int x, y;
 
 	for (int i = 0; i < d; i++, x1 += dx, y1 += dy)
 	{
-		bufferDrawPixel((int)x1, (int)y1);
+		if ((x = (int)x1) >= 0 && (y = (int)y1) >= 0 && x < CON_WIDTH && y < CON_HEIGHT)
+		{
+			buffer[y * CON_WIDTH + x] = '@';
+		}
 	}
 }
 
